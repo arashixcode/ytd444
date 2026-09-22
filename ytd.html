@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedTube Stream</title>
+    <style>
+        :root {
+            --bg-color: #0f0f0f;
+            --surface-color: #212121;
+            --primary-red: #ff0000;
+            --text-color: #ffffff;
+            --text-secondary: #aaa;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding-bottom: 50px;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-color);
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #222;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-red);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .search-box {
+            display: flex;
+            flex: 1;
+            margin-left: 15px;
+            background: var(--surface-color);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        .search-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 10px 15px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-box button {
+            background: var(--primary-red);
+            border: none;
+            padding: 0 15px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .container {
+            padding: 15px;
+        }
+
+        #player-container {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            background: black;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .back-btn {
+            background: var(--surface-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        .video-card {
+            background: var(--surface-color);
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .video-card:active {
+            transform: scale(0.98);
+        }
+
+        .thumbnail {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #333;
+            object-fit: cover;
+        }
+
+        .video-info {
+            padding: 10px;
+        }
+
+        .video-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .video-channel {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">▶ RedTube</div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search or paste YouTube Link...">
+            <button onclick="handleSearch()">🔍</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="player-container">
+            <button class="back-btn" onclick="goBackToHome()">← ရှာဖွေမှုများသို့ ပြန်သွားရန်</button>
+            <div class="video-wrapper">
+                <iframe id="youtubePlayer" src="" allowfullscreen></iframe>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">ရှာဖွေနေပါသည်...</div>
+        <div id="videoGrid" class="video-grid"></div>
+    </div>
+
+    <script>
+        const pipedInstances = [
+            'https://pipedapi.kavin.rocks',
+            'https://pipedapi.tokhmi.xyz',
+            'https://api.piped.projectsegfau.lt'
+        ];
+
+        function extractYouTubeId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\s?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        async function handleSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            const videoId = extractYouTubeId(query);
+            if (videoId) {
+                playVideo(videoId);
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('videoGrid').innerHTML = '';
+            document.getElementById('player-container').style.display = 'none';
+
+            let data = null;
+
+            // CORS Proxy ကို အသုံးပြု၍ Local file restriction ကို ကျော်လွှားခြင်း
+            for (let instance of pipedInstances) {
+                try {
+                    const targetUrl = `${instance}/search?q=${encodeURIComponent(query)}`;
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+                    
+                    const response = await fetch(proxyUrl);
+                    if (response.ok) {
+                        const textData = await response.text();
+                        data = JSON.parse(textData);
+                        break;
+                    }
+                } catch (error) {
+                    console.log(`Trying next server...`);
+                }
+            }
+
+            document.getElementById('loading').style.display = 'none';
+
+            if (data && data.items) {
+                renderResults(data.items);
+            } else {
+                alert('ချိတ်ဆက်မှု အမှားအယွင်းရှိပါသည်။ ကျေးဇူးပြု၍ အင်တာနက်လိုင်း စစ်ဆေးပါ။');
+            }
+        }
+
+        function renderResults(items) {
+            const grid = document.getElementById('videoGrid');
+            grid.innerHTML = '';
+
+            const videos = items.filter(item => item.type === 'stream');
+
+            if (videos.length === 0) {
+                grid.innerHTML = '<p style="text-align:center; color:#aaa;">ဘာဗီဒီယိုမှ မတွေ့ပါ။</p>';
+                return;
+            }
+
+            videos.forEach(video => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                
+                const vId = video.url.split('=')[1];
+
+                card.innerHTML = `
+                    <img class="thumbnail" src="${video.thumbnail}" alt="Thumbnail">
+                    <div class="video-info">
+                        <div class="video-title">${video.title}</div>
+                        <div class="video-channel">${video.uploaderName || 'Unknown'}</div>
+                    </div>
+                `;
+
+                card.onclick = () => playVideo(vId);
+                grid.appendChild(card);
+            });
+        }
+
+        function playVideo(videoId) {
+            document.getElementById('player-container').style.display = 'block';
+            document.getElementById('videoGrid').innerHTML = '';
+            document.getElementById('youtubePlayer').src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function goBackToHome() {
+            document.getElementById('player-container').style.display = 'none';
+            document.getElementById('youtubePlayer').src = '';
+            document.getElementById('searchInput').value = '';
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                handleSearch();
+            }
+        });
+    </script>
+</body>
+</html>
